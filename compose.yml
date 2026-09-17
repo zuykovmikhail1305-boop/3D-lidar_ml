@@ -29,6 +29,9 @@ services:
       # Source code overlays on top
       - ./src:/home/ws/src
 
+      # Dataset directory
+      - ./dataset:/home/ws/dataset
+
       # X11 for GUI applications
       - /tmp/.X11-unix:/tmp/.X11-unix
 
