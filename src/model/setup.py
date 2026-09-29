@@ -6,8 +6,6 @@ setup(
     name=package_name,
     version='0.0.0',
     packages=find_packages(exclude=['test']),
-    package_data={'model': ['lidar_api/artifacts/*.pt', 'lidar_api/*']},
-    include_package_data=True,
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
