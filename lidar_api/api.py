@@ -1,14 +1,17 @@
 r"""
-Поиск скоплений на одном кадре лидара: npy-массив на входе, JSON на выходе.
+Поиск скоплений на одном кадре лидара: numpy-массив точек на входе, JSON на выходе.
 
     from api import analyze, analyze_json
 
-    info = analyze("frame.npy")              # путь к .npy -> dict
     info = analyze(points)                   # numpy-массив (N, 4) x y z intensity -> dict
-    info = analyze(npy_bytes)                # содержимое .npy-файла в байтах (например, из запроса) -> dict
     text = analyze_json(points)              # то же, сразу строкой JSON
 
-Из командной строки (печатает JSON):
+points - облако одного кадра, уже в памяти:
+    (N, 4) x y z intensity, (N, 5) x y z intensity ring
+    или structured array с полями x, y, z, intensity (и, если есть, ring).
+Файлы функция не читает.
+
+Для проверки из командной строки (файл .npy читается здесь же и передаётся массивом):
 
     python api.py D:\dataset_numpy\doubleT_obstacle\points\000000.npy
 
@@ -42,7 +45,6 @@ r"""
 Зависимости: numpy, torch.
 """
 
-import io
 import json
 import os
 import sys
@@ -72,17 +74,13 @@ def get_detector(device=None):
     return _detector
 
 
-def load_points(data):
-    """Путь к .npy, байты .npy-файла или numpy-массив -> облако точек для детектора.
+def check_points(arr):
+    """numpy-массив кадра -> облако точек для детектора; неподходящий массив - ошибка.
 
     Облако - (N, 4) x y z intensity, (N, 5) + ring, или structured array с полями x, y, z, intensity (и ring).
     """
-    if isinstance(data, (str, os.PathLike)):
-        arr = np.load(data, allow_pickle=False)
-    elif isinstance(data, (bytes, bytearray, memoryview)):
-        arr = np.load(io.BytesIO(bytes(data)), allow_pickle=False)
-    else:
-        arr = np.asarray(data)
+    if not isinstance(arr, np.ndarray):
+        raise TypeError("ожидается numpy-массив точек, а пришёл %s" % type(arr).__name__)
     if arr.dtype.names:
         missing = [k for k in ("x", "y", "z", "intensity") if k not in arr.dtype.names]
         if missing:
@@ -98,11 +96,11 @@ def _block_name(a, b):
     return "%d-%d" % (a, b)
 
 
-def analyze(data, device=None):
-    """Кадр (путь к .npy / байты .npy / numpy-массив) -> dict со скоплениями по блокам 0-100, 100-200, 200-300 м."""
+def analyze(points, device=None):
+    """numpy-массив точек кадра -> dict со скоплениями по блокам 0-100, 100-200, 200-300 м."""
+    points = check_points(points)
+    det = get_detector(device)                       # первый вызов грузит модель - в time_ms не входит
     t0 = time.perf_counter()
-    points = load_points(data)
-    det = get_detector(device)
     with _lock:                                      # модель одна на процесс - кадры по очереди
         res = det.process_points(points)
 
@@ -137,13 +135,13 @@ def analyze(data, device=None):
     }
 
 
-def analyze_json(data, device=None, indent=None):
+def analyze_json(points, device=None, indent=None):
     """То же, что analyze, но сразу строкой JSON."""
-    return json.dumps(analyze(data, device), ensure_ascii=False, indent=indent)
+    return json.dumps(analyze(points, device), ensure_ascii=False, indent=indent)
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         raise SystemExit("python api.py <кадр.npy> [ещё.npy ...]")
     for path in sys.argv[1:]:
-        print(analyze_json(path, indent=2))
+        print(analyze_json(np.load(path), indent=2))

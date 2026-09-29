@@ -484,11 +484,11 @@ function show(i, d) {
   clusters = s.clusters;
   $("infoA").textContent = fmt(s.n_in) + " точек · вход модели";
   $("infoB").textContent = fmt(s.n_out) + " точек · добавлено " + fmt(s.added) + ", из них в поиске " + fmt(s.added_search);
-  $("hits").textContent = clusters.length
+  $("hits").textContent = "детект: " + (s.detected ? 1 : 0) + " · " + (clusters.length
     ? "скоплений: " + clusters.length + " · " + clusters.slice(0, 3).map((c) =>
         c.range_m + " м (зона " + zones[c.zone].from + "–" + zones[c.zone].to + "), " + c.points + " точек, " +
         c.extent_m.map((v) => v.toFixed(2)).join("×") + " м").join(" · ") + (clusters.length > 3 ? " · …" : "")
-    : "скоплений нет";
+    : "скоплений нет");
   drawBoxes();
   cur = i;
   $("frame").value = i;

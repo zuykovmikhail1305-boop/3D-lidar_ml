@@ -56,7 +56,12 @@ res = det.process_points(points)         # на каждый кадр
 
 for c in res.clusters:
     print(c["center"], c["extent_m"], c["points"])
+
+res.detected                             # 1 - в кадре есть скопление, 0 - нет
+det.detect(points)                       # то же одной строкой: сразу 1 или 0
 ```
+
+`det.detect(...)` принимает то же облако, что `process_points`, или сырое сообщение PointCloud2 в байтах.
 
 `points` — облако одного кадра, в одном из видов:
 - numpy-массив `(N, 4)`: `x, y, z, intensity`;
@@ -83,8 +88,8 @@ python run_bag.py D:\hackaton_full_dataset\cloud_with_fake_obj
 | файл | что внутри |
 |---|---|
 | `clusters.csv` | по строке на скопление: кадр, время, зона, точки, размеры, центр, рамка |
-| `frames.csv` | по строке на кадр: точек во входе и в ответе, добавлено, скоплений |
-| `clusters.jsonl` | по строке JSON на кадр: `{"frame", "timestamp_ns", "clusters": [...]}` |
+| `frames.csv` | по строке на кадр: `detected` (1 / 0), точек во входе и в ответе, добавлено, скоплений |
+| `clusters.jsonl` | по строке JSON на кадр: `{"frame", "timestamp_ns", "detected", "clusters": [...]}` |
 
 Ключи: `--limit 100` (первые 100 кадров), `--stride 10` (каждый 10-й), `--device cpu`, `--zones file.json`, `--out папка`.
 
@@ -100,6 +105,7 @@ python viewer/server.py D:\hackaton_full_dataset\cloud_with_fake_obj
 
 | поле | тип | что это |
 |---|---|---|
+| `detected` | `int` | 1 — в кадре найдено хотя бы одно скопление, 0 — нет |
 | `clusters` | `list[dict]` | найденные скопления, см. ниже |
 | `range_in` | `float32 (128, 1024)` | вход модели, м; 0 — пусто. Уже обрезан по рабочему сектору |
 | `intensity_in` | `float32 (128, 1024)` | интенсивность входа, 0..255 |
