@@ -219,3 +219,5 @@ __marimo__/
 
 # Dataset bind mount
 /dataset
+# веса и журналы обучения
+runs_unet/

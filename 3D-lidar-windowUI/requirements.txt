@@ -1,0 +1,19 @@
+# GUI framework (cross-platform desktop window)
+PySide6>=6.6
+
+# Numerical arrays for point cloud processing
+numpy>=1.26
+
+# 3D rendering engine (VTK-based) + Qt widget integration
+pyvista>=0.43
+pyvistaqt>=0.11
+
+# Data validation for ML model contract (ObstacleReport JSON)
+pydantic>=2.5
+
+# Tests for pure logic (parsers, filters, thresholds)
+pytest>=8.0
+
+# Optional: point cloud file reading (PCD/PLY) and voxel downsampling.
+# If not needed, the built-in NumPy voxel filter is used instead.
+# open3d>=0.18

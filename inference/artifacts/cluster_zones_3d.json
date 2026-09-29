@@ -1,0 +1,71 @@
+{
+  "note": "пороги объёмного поиска скоплений по зонам дальности, м; см. lidar_detector/clusters.py",
+  "zones": [
+    {
+      "from": 0.0,
+      "to": 50.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 15,
+      "min_size": 0.2,
+      "max_size": 6.1,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    },
+    {
+      "from": 50.0,
+      "to": 100.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 6,
+      "min_size": 0.2,
+      "max_size": 6.1,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    },
+    {
+      "from": 100.0,
+      "to": 150.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 6,
+      "min_size": 0.2,
+      "max_size": 6.0,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    },
+    {
+      "from": 150.0,
+      "to": 200.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 6,
+      "min_size": 0.2,
+      "max_size": 6.0,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    },
+    {
+      "from": 200.0,
+      "to": 250.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 6,
+      "min_size": 0.2,
+      "max_size": 6.0,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    },
+    {
+      "from": 250.0,
+      "to": 300.0,
+      "enabled": true,
+      "radius": 0.16,
+      "min_points": 6,
+      "min_size": 0.2,
+      "max_size": 6.0,
+      "min_thickness": 0.2,
+      "habit": 0.2
+    }
+  ]
+}
