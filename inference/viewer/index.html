@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Скопления добавленных точек</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {
+  --bg: #0d1418;
+  --panel: rgba(18, 27, 33, 0.92);
+  --line: #25343d;
+  --text: #dfe8ec;
+  --muted: #8ea1ab;
+  --accent: #4fb3d9;
+  --accent-text: #06141b;
+  --grid: #1d2a31;
+  --kept: #6f93a8;
+  --added: #46c37b;
+  --ignored: #3c4c55;
+  --cluster: #ec4899;
+}
+:root[data-theme="light"] {
+  --bg: #eef1f3;
+  --panel: rgba(255, 255, 255, 0.94);
+  --line: #d3dade;
+  --text: #16232a;
+  --muted: #5d6e77;
+  --accent: #1a7fa8;
+  --accent-text: #ffffff;
+  --grid: #d6dde1;
+  --kept: #7d97a6;
+  --added: #1f9d55;
+  --ignored: #b8c4cb;
+  --cluster: #c2185b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+#view { position: fixed; inset: 0; }
+canvas { display: block; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+.pane-label { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; pointer-events: none; max-width: calc(50% - 24px); }
+.pane-label b { font-weight: 600; }
+.pane-label .mono { color: var(--muted); font-size: 12px; display: block; }
+.pane-label .hit { color: var(--cluster); }
+#divider { position: fixed; background: var(--line); pointer-events: none; }
+#status { position: fixed; top: 12px; right: 12px; color: var(--muted); }
+#status:empty { display: none; }
+
+footer { position: fixed; left: 12px; right: 12px; bottom: 12px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 10px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+#frame { flex: 1; min-width: 160px; }
+input[type=range] { accent-color: var(--accent); }
+button, select { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+label input[type=range] { width: 110px; }
+.sep { width: 1px; align-self: stretch; background: var(--line); }
+#legend { display: flex; align-items: center; gap: 10px; color: var(--muted); flex-wrap: wrap; }
+#bar { width: 120px; height: 8px; border-radius: 4px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#zonesPanel { position: fixed; right: 12px; bottom: 160px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; max-width: calc(100% - 24px); max-height: calc(100% - 180px); overflow: auto; z-index: 2; }
+#zonesPanel[hidden] { display: none; }
+.zp-head, .zp-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.zp-head { margin-bottom: 8px; }
+.zp-foot { margin-top: 8px; justify-content: flex-start; }
+#zonesPanel table { border-collapse: collapse; font-size: 13px; }
+#zonesPanel th { color: var(--muted); font-weight: 500; text-align: left; padding: 2px 8px 6px 0; white-space: nowrap; }
+#zonesPanel td { padding: 3px 8px 3px 0; white-space: nowrap; }
+#zonesPanel tr.off td:not(:nth-child(2)) { opacity: 0.45; }
+#zonesPanel input[type=number] { width: 56px; font: inherit; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+#zonesPanel select { padding: 3px 6px; }
+#zonesState { color: var(--muted); font-size: 12px; }
+#zonesState.dirty { color: var(--cluster); }
+#more { display: none; }
+@media (max-width: 700px) {
+  #more { display: inline-block; }
+  footer.collapsed .row:not(:first-child) { display: none; }
+  .sep { display: none; }
+  #zonesPanel { bottom: auto; top: 12px; }
+  label input[type=range] { width: 80px; }
+  .pane-label { max-width: calc(100% - 24px); }
+}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="divider"></div>
+<div class="pane-label" id="labA"><b>до модели</b><span class="mono" id="infoA">—</span></div>
+<div class="pane-label" id="labB"><b>после модели · скопления</b><span class="mono" id="infoB">—</span><span class="mono hit" id="hits"></span></div>
+<span class="mono" id="status"></span>
+
+<section id="zonesPanel" hidden>
+  <div class="zp-head"><b>пороги по зонам дальности</b><button id="zonesClose" aria-label="закрыть">✕</button></div>
+  <table>
+    <thead><tr><th>зона</th><th>поиск</th>
+      <th title="наименьший радиус соседства, м; дальше растёт на 1 см на метр дальности">радиус, м</th>
+      <th title="сколько точек нужно скоплению в начале зоны; дальше порог падает как 1/r²">точек</th>
+      <th title="самая длинная сторона рамки не меньше, м">размер от</th>
+      <th title="самая длинная сторона рамки не больше, м - длиннее уже стена, а не предмет">до</th>
+      <th title="самая короткая сторона рамки не меньше, м - плоский кусок стены или пола отсекается">толщина</th>
+      <th title="не искать там, где модель добавляет точки чаще этой доли кадров">привычки</th>
+      <th title="сколько точек нужно и какой радиус соседства в начале и в конце зоны">нужно · радиус</th></tr></thead>
+    <tbody id="zonesBody"></tbody>
+  </table>
+  <div class="zp-foot">
+    <button id="zonesSave" title="записать в cluster_zones.json - его читает find_clusters.py">сохранить</button>
+    <button id="zonesRevert" title="вернуть то, что сейчас в файле">как в файле</button>
+    <button id="zonesDefault" title="одинаковые пороги во всех зонах">по умолчанию</button>
+    <span class="mono" id="zonesState"></span>
+  </div>
+</section>
+
+<footer class="collapsed">
+  <div class="row">
+    <button id="more" title="показать или скрыть настройки">настройки</button>
+    <button id="prev" title="назад (←)">◀</button>
+    <button id="play" title="пуск / пауза (пробел)">▶ пуск</button>
+    <button id="next" title="вперёд (→)">▶</button>
+    <input id="frame" type="range" min="0" max="0" value="0" aria-label="кадр">
+    <span class="mono" id="pos">0 / 0</span>
+    <select id="speed" aria-label="скорость">
+      <option value="1">1×</option><option value="2">2×</option><option value="5">5×</option>
+    </select>
+    <button id="seekPrev" title="предыдущий кадр со скоплением ([)">◀ скопление</button>
+    <button id="seekNext" title="следующий кадр со скоплением (])">скопление ▶</button>
+    <button id="zonesBtn" title="пороги поиска по зонам дальности">зоны</button>
+  </div>
+  <div class="row">
+    <label>цвет
+      <select id="color">
+        <option value="3">скопления</option>
+        <option value="1">высота</option>
+        <option value="0">интенсивность</option>
+        <option value="2">дальность</option>
+      </select>
+    </label>
+    <span id="legend"></span>
+    <span class="sep"></span>
+    <label>дальность до <input id="range" type="range" min="5" max="200" step="5" value="60"><span class="mono" id="rangeV">60 м</span></label>
+    <label>точка <input id="size" type="range" min="1" max="8" step="0.5" value="2.5"></label>
+    <span class="sep"></span>
+    <label title="сколько градусов срезать с левого края сектора">обрезать слева <input id="cutL" type="range" min="0" max="49" step="1" value="0"><span class="mono" id="cutLV">0°</span></label>
+    <label title="сколько градусов срезать с правого края сектора">справа <input id="cutR" type="range" min="0" max="49" step="1" value="0"><span class="mono" id="cutRV">0°</span></label>
+    <span class="mono" id="fov">поле 100°</span>
+    <span class="sep"></span>
+    <button data-view="top" title="1">сверху</button>
+    <button data-view="side" title="2">сбоку</button>
+    <button data-view="sensor" title="3">от лидара</button>
+    <button id="theme">тема</button>
+  </div>
+</footer>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---------------------------------------------------------------- сцена: одна камера, две панели
+const view = $("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setScissorTest(true);
+view.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 2000);
+
+const CAP = 200000;
+const uniforms = {
+  mode: { value: 3 }, maxRange: { value: 60 }, size: { value: 2.5 }, scale: { value: 1 },
+  cutL: { value: 0 }, cutR: { value: 0 },
+  lo: { value: new THREE.Vector3(0, -3, 0) }, hi: { value: new THREE.Vector3(80, 4, 60) },
+  cKept: { value: new THREE.Color() }, cAdded: { value: new THREE.Color() },
+  cIgnored: { value: new THREE.Color() }, cCluster: { value: new THREE.Color() },
+};
+// категории точек: 0 на месте, 3 добавлена, 4 скопление, 5 добавлена там, где не ищем
+const VERT = `
+  attribute vec4 attr;            // интенсивность, высота, дальность, категория
+  uniform float mode, maxRange, size, scale, cutL, cutR;
+  uniform vec3 lo, hi;
+  varying float vT; varying float vCat; varying float vKeep;
+  void main() {
+    float ang = degrees(atan(-position.z, position.x)) + 90.0;   // от «вперёд»: + влево, - вправо
+    bool inSector = ang <= 50.0 - cutL && ang >= -50.0 + cutR;
+    vKeep = (attr.z <= maxRange && inSector) ? 1.0 : 0.0;
+    vCat = attr.w;
+    float v = mode < 0.5 ? attr.x : (mode < 1.5 ? attr.y : attr.z);
+    float a = mode < 0.5 ? lo.x : (mode < 1.5 ? lo.y : lo.z);
+    float b = mode < 0.5 ? hi.x : (mode < 1.5 ? hi.y : hi.z);
+    vT = clamp((v - a) / max(b - a, 1e-6), 0.0, 1.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    bool cl = attr.w > 3.5 && attr.w < 4.5;
+    float boost = cl ? 2.0 : ((mode > 2.5 && attr.w > 2.5 && attr.w < 3.5) ? 1.4 : 1.0);
+    gl_PointSize = size * scale * boost * clamp(12.0 / -mv.z, 0.6, 3.0);
+  }`;
+const FRAG = `
+  uniform float mode;
+  uniform vec3 cKept, cAdded, cIgnored, cCluster;
+  varying float vT; varying float vCat; varying float vKeep;
+  vec3 turbo(float t) {
+    const vec4 kR = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+    const vec4 kG = vec4(0.09140261, 2.19418839, 4.84296658, -14.18503333);
+    const vec4 kB = vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+    const vec2 kR2 = vec2(-152.94239396, 59.28637943);
+    const vec2 kG2 = vec2(4.27729857, 2.82956604);
+    const vec2 kB2 = vec2(-89.90310912, 27.34824973);
+    vec4 v4 = vec4(1.0, t, t * t, t * t * t);
+    vec2 v2 = v4.zw * v4.z;
+    return vec3(dot(v4, kR) + dot(v2, kR2), dot(v4, kG) + dot(v2, kG2), dot(v4, kB) + dot(v2, kB2));
+  }
+  void main() {
+    if (vKeep < 0.5) discard;
+    vec2 c = gl_PointCoord - 0.5;
+    if (dot(c, c) > 0.25) discard;
+    vec3 col;
+    if (vCat > 3.5 && vCat < 4.5) col = cCluster;              // скопление видно при любом цвете
+    else if (mode > 2.5) col = vCat < 0.5 ? cKept : (vCat < 3.5 ? cAdded : cIgnored);
+    else col = clamp(turbo(vT), 0.0, 1.0);
+    gl_FragColor = vec4(col, 1.0);
+  }`;
+const material = new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG });
+const boxMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+function makePane() {
+  const scene = new THREE.Scene();
+  const geom = new THREE.BufferGeometry();
+  const pos = new Float32Array(CAP * 3), attr = new Float32Array(CAP * 4);
+  geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geom.setAttribute("attr", new THREE.BufferAttribute(attr, 4));
+  geom.setDrawRange(0, 0);
+  const pts = new THREE.Points(geom, material);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  const axes = new THREE.AxesHelper(1.5);
+  scene.add(axes);
+  const boxes = new THREE.Group();
+  scene.add(boxes);
+  return { scene, geom, pos, attr, axes, boxes, grid: null };
+}
+const panes = [makePane(), makePane()];
+
+function fill(pane, arr, off, n) {
+  n = Math.min(n, CAP);
+  for (let k = 0; k < n; k++) {
+    const b = (off + k) * 5;
+    const x = arr[b], y = arr[b + 1], z = arr[b + 2];
+    pane.pos[k * 3] = x; pane.pos[k * 3 + 1] = z; pane.pos[k * 3 + 2] = -y;   // лидар z вверх -> three.js y
+    pane.attr[k * 4] = arr[b + 3];
+    pane.attr[k * 4 + 1] = z;
+    pane.attr[k * 4 + 2] = Math.sqrt(x * x + y * y + z * z);
+    pane.attr[k * 4 + 3] = arr[b + 4];
+  }
+  pane.geom.setDrawRange(0, n);
+  pane.geom.attributes.position.needsUpdate = true;
+  pane.geom.attributes.attr.needsUpdate = true;
+}
+
+// рамки скоплений - на обеих панелях: слева видно, что было в этом месте до модели
+let clusters = [];
+function drawBoxes() {
+  const l = +$("cutL").value, r = +$("cutR").value, maxR = +$("range").value;
+  panes.forEach((p) => {
+    p.boxes.children.slice().forEach((c) => { p.boxes.remove(c); c.geometry.dispose(); });
+    clusters.forEach((c) => {
+      const cx = (c.min[0] + c.max[0]) / 2, cy = (c.min[1] + c.max[1]) / 2;
+      const ang = Math.atan2(cy, cx) * 180 / Math.PI + 90;
+      if (ang > 50 - l || ang < -50 + r || c.range_m > maxR) return;   // вне видимой части - без рамки
+      const pad = 0.05;
+      const lo = new THREE.Vector3(c.min[0] - pad, c.min[2] - pad, -c.max[1] - pad);
+      const hi = new THREE.Vector3(c.max[0] + pad, c.max[2] + pad, -c.min[1] + pad);
+      const box = new THREE.Box3Helper(new THREE.Box3(lo, hi));
+      box.material = boxMaterial;
+      p.boxes.add(box);
+    });
+  });
+  dirty = true;
+}
+
+// ---------------------------------------------------------------- раскладка панелей
+let layout = null;
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  uniforms.scale.value = renderer.getPixelRatio();
+  const vertical = w < 700 && h > w;
+  const footH = document.querySelector("footer").offsetHeight + 24;
+  if (vertical) {
+    const ph = Math.floor((h - footH) / 2);
+    layout = [{ x: 0, y: h - ph, w, h: ph }, { x: 0, y: h - 2 * ph, w, h: ph }];
+    Object.assign($("divider").style, { left: "0", top: ph + "px", width: "100%", height: "1px" });
+    Object.assign($("labA").style, { left: "12px", top: "12px" });
+    Object.assign($("labB").style, { left: "12px", top: (ph + 12) + "px" });
+  } else {
+    const pw = Math.floor(w / 2);
+    layout = [{ x: 0, y: 0, w: pw, h }, { x: pw, y: 0, w: w - pw, h }];
+    Object.assign($("divider").style, { left: pw + "px", top: "0", width: "1px", height: "100%" });
+    Object.assign($("labA").style, { left: "12px", top: "12px" });
+    Object.assign($("labB").style, { left: (pw + 12) + "px", top: "12px" });
+  }
+  camera.aspect = layout[0].w / layout[0].h;
+  camera.updateProjectionMatrix();
+  if (!vertical) {                                     // панель зон - над панелью управления
+    $("zonesPanel").style.bottom = footH + "px";
+    $("zonesPanel").style.maxHeight = "calc(100% - " + (footH + 12) + "px)";
+  } else {
+    $("zonesPanel").style.bottom = "";
+    $("zonesPanel").style.maxHeight = "calc(100% - " + (footH + 24) + "px)";
+  }
+  dirty = true;
+}
+window.addEventListener("resize", resize);
+// нижняя панель меняет высоту (переносы строк, подписи после загрузки) - пересчитать раскладку
+if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(document.querySelector("footer"));
+
+let dirty = true;
+function loop() {
+  requestAnimationFrame(loop);
+  if (!dirty || !layout) return;
+  panes.forEach((p, k) => {
+    const r = layout[k];
+    renderer.setViewport(r.x, r.y, r.w, r.h);
+    renderer.setScissor(r.x, r.y, r.w, r.h);
+    renderer.render(p.scene, camera);
+  });
+  dirty = false;
+}
+
+// ---------------------------------------------------------------- камера: общая орбита
+const orbit = { target: new THREE.Vector3(0, -1, 15), dist: 30, yaw: Math.PI, pitch: 0.55 };
+function applyCamera() {
+  orbit.pitch = Math.max(-1.45, Math.min(1.55, orbit.pitch));
+  orbit.dist = Math.max(0.5, Math.min(600, orbit.dist));
+  const cp = Math.cos(orbit.pitch);
+  camera.position.set(orbit.target.x + orbit.dist * cp * Math.sin(orbit.yaw),
+                      orbit.target.y + orbit.dist * Math.sin(orbit.pitch),
+                      orbit.target.z + orbit.dist * cp * Math.cos(orbit.yaw));
+  camera.lookAt(orbit.target);
+  const far = camera.position.length() > 3;
+  panes.forEach((p) => { p.axes.visible = far; });
+}
+const VIEWS = {
+  top:    { target: [0, 0, 16], dist: 60, yaw: Math.PI, pitch: 1.55 },
+  side:   { target: [0, 0, 25], dist: 45, yaw: -Math.PI / 2, pitch: 0.05 },
+  sensor: { target: [0, 0, 20], dist: 20.5, yaw: Math.PI, pitch: 0.02 },
+  reset:  { target: [0, -1, 15], dist: 30, yaw: Math.PI, pitch: 0.55 },
+};
+function setView(k) {
+  const v = VIEWS[k];
+  orbit.target.set(...v.target); orbit.dist = v.dist; orbit.yaw = v.yaw; orbit.pitch = v.pitch;
+  applyCamera(); dirty = true;
+}
+let drag = null;
+const cv = renderer.domElement;
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
+cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (drag.pan) {
+    const k = orbit.dist * 0.0015;
+    orbit.target.addScaledVector(new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0), -dx * k)
+                .addScaledVector(new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1), dy * k);
+  } else { orbit.yaw -= dx * 0.005; orbit.pitch += dy * 0.005; }
+  applyCamera(); dirty = true;
+});
+cv.addEventListener("pointerup", () => { drag = null; });
+cv.addEventListener("wheel", (e) => { e.preventDefault(); orbit.dist *= Math.exp(e.deltaY * 0.001); applyCamera(); dirty = true; }, { passive: false });
+
+// ---------------------------------------------------------------- пороги по зонам дальности
+const HABITS = [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5];
+let zones = [], savedZones = "";
+const params = () => "zones=" + encodeURIComponent(JSON.stringify(zones));
+// то же, что required_points и радиус в find_clusters_3d.py
+const needPts = (r, z) => {
+  const c = info.common, r0 = Math.max(z.from, c.ref_range);
+  return Math.max(c.min_points_floor, Math.ceil(z.min_points * (r0 / Math.max(r, r0)) ** 2));
+};
+const radius = (r, z) => Math.max(z.radius, info.common.radius_per_m * r);
+const options = (vals, cur, fmtv) => vals.map((v) =>
+  '<option value="' + v + '"' + (Math.abs(v - cur) < 1e-9 ? " selected" : "") + ">" + fmtv(v) + "</option>").join("");
+const num = (k, f, v, step, min) =>
+  '<input type="number" min="' + min + '" step="' + step + '" value="' + v + '" data-k="' + k + '" data-f="' + f + '">';
+function renderZones() {
+  $("zonesBody").innerHTML = zones.map((z, k) => {
+    const habits = HABITS.includes(z.habit) ? HABITS : HABITS.concat([z.habit]).sort((a, b) => a - b);
+    return '<tr class="' + (z.enabled ? "" : "off") + '">' +
+      '<td class="mono">' + z.from + "–" + z.to + " м</td>" +
+      '<td><input type="checkbox" data-k="' + k + '" data-f="enabled"' + (z.enabled ? " checked" : "") + "></td>" +
+      "<td>" + num(k, "radius", z.radius, 0.05, 0.01) + "</td>" +
+      "<td>" + num(k, "min_points", z.min_points, 1, 1) + "</td>" +
+      "<td>" + num(k, "min_size", z.min_size, 0.05, 0) + "</td>" +
+      "<td>" + num(k, "max_size", z.max_size, 0.5, 0.1) + "</td>" +
+      "<td>" + num(k, "min_thickness", z.min_thickness, 0.05, 0) + "</td>" +
+      '<td><select data-k="' + k + '" data-f="habit">' + options(habits, z.habit, (v) => v ? Math.round(v * 100) + "%" : "выкл") + "</select></td>" +
+      '<td class="mono">' + needPts(z.from, z) + " → " + needPts(z.to, z) + " т. · " +
+        radius(z.from, z).toFixed(2) + " → " + radius(z.to, z).toFixed(2) + " м</td></tr>";
+  }).join("");
+  const dirtyZ = JSON.stringify(zones) !== savedZones;
+  $("zonesState").textContent = dirtyZ ? "не сохранено" : (info.zones_saved ? "как в файле" : "файла ещё нет");
+  $("zonesState").classList.toggle("dirty", dirtyZ);
+}
+function zonesChanged() {
+  renderZones();
+  try { localStorage.setItem("view_clusters3d_zones", JSON.stringify(zones)); } catch (e) {}
+  cache.clear();
+  const i = cur; cur = -1; go(i < 0 ? 0 : i);
+}
+$("zonesBody").addEventListener("change", (e) => {
+  const el = e.target, k = +el.dataset.k, f = el.dataset.f;
+  if (!f) return;
+  if (f === "enabled") zones[k].enabled = el.checked;
+  else if (f === "min_points") zones[k].min_points = Math.max(1, Math.round(+el.value || 1));
+  else zones[k][f] = Math.max(0, +el.value || 0);
+  if (zones[k].max_size <= zones[k].min_size) zones[k].max_size = +(zones[k].min_size + 0.5).toFixed(2);
+  if (zones[k].radius < 0.01) zones[k].radius = 0.01;
+  zonesChanged();
+});
+$("zonesBtn").onclick = () => { $("zonesPanel").hidden = !$("zonesPanel").hidden; $("zonesBtn").classList.toggle("on", !$("zonesPanel").hidden); };
+$("zonesClose").onclick = () => { $("zonesPanel").hidden = true; $("zonesBtn").classList.remove("on"); };
+$("zonesSave").onclick = async () => {
+  try {
+    const r = await fetch("api/zones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ zones }) });
+    if (!r.ok) throw new Error(await r.text());
+    const res = await r.json();
+    zones = res.zones; savedZones = JSON.stringify(zones); info.zones_saved = true;
+    renderZones();
+    $("zonesState").textContent = "сохранено в " + res.saved;
+  } catch (e) { $("zonesState").textContent = "ошибка: " + e.message; }
+};
+$("zonesRevert").onclick = () => { zones = JSON.parse(savedZones); zonesChanged(); };
+$("zonesDefault").onclick = () => { zones = JSON.parse(JSON.stringify(info.default_zones)); zonesChanged(); };
+
+// дуги на полу на границах зон - видно, в какую зону попадает скопление
+function drawZoneArcs() {
+  panes.forEach((p) => {
+    if (p.arcs) { p.scene.remove(p.arcs); p.arcs.traverse((o) => o.geometry && o.geometry.dispose()); }
+    p.arcs = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({ color: css("--muted") });
+    zones.slice(1).forEach((z) => {
+      const pts = [];
+      for (let a = -50; a <= 50; a += 1) {                      // тот же сектор, что видит лидар
+        const t = (a - 90) * Math.PI / 180;                       // азимут лидара
+        pts.push(new THREE.Vector3(z.from * Math.cos(t), -2.2, -z.from * Math.sin(t)));
+      }
+      p.arcs.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+    });
+    p.scene.add(p.arcs);
+  });
+  dirty = true;
+}
+
+// ---------------------------------------------------------------- данные
+let info = null, cur = -1, want = 0, playing = false, loading = false, lastShown = 0;
+const cache = new Map();
+function fetchFrame(i) {
+  const key = i + "?" + params();
+  if (!cache.has(key)) {
+    const p = fetch("api/frame/" + i + "?" + params()).then(async (r) => {
+      if (!r.ok) throw new Error(await r.text());
+      return { arr: new Float32Array(await r.arrayBuffer()), nA: +r.headers.get("X-N-Before"),
+               st: JSON.parse(r.headers.get("X-Stats")) };
+    });
+    p.catch(() => cache.delete(key));
+    cache.set(key, p);
+    if (cache.size > 30) cache.delete(cache.keys().next().value);
+  }
+  return cache.get(key);
+}
+const fmt = (n) => n.toLocaleString("ru");
+function show(i, d) {
+  const nB = d.arr.length / 5 - d.nA;
+  fill(panes[0], d.arr, 0, d.nA);
+  fill(panes[1], d.arr, d.nA, nB);
+  const s = d.st;
+  clusters = s.clusters;
+  $("infoA").textContent = fmt(s.n_in) + " точек · вход модели";
+  $("infoB").textContent = fmt(s.n_out) + " точек · добавлено " + fmt(s.added) + ", из них в поиске " + fmt(s.added_search);
+  $("hits").textContent = clusters.length
+    ? "скоплений: " + clusters.length + " · " + clusters.slice(0, 3).map((c) =>
+        c.range_m + " м (зона " + zones[c.zone].from + "–" + zones[c.zone].to + "), " + c.points + " точек, " +
+        c.extent_m.map((v) => v.toFixed(2)).join("×") + " м").join(" · ") + (clusters.length > 3 ? " · …" : "")
+    : "скоплений нет";
+  drawBoxes();
+  cur = i;
+  $("frame").value = i;
+  $("pos").textContent = i + " / " + (info.frames - 1);
+  dirty = true;
+}
+async function pump() {
+  if (loading || !info || want === cur) return;
+  loading = true;
+  const i = want;
+  try {
+    $("status").textContent = "кадр " + i + "…";
+    show(i, await fetchFrame(i));
+    $("status").textContent = "";
+    const step = playing ? playStep() : 1;
+    for (let k = 1; k <= (playing ? 6 : 2); k++) if (i + k * step < info.frames) fetchFrame(i + k * step);
+  } catch (e) {
+    $("status").textContent = "ошибка: " + e.message;
+    playing = false; syncPlay();
+  }
+  loading = false;
+  if (want !== cur) pump();
+}
+function go(i) { if (info) { want = Math.max(0, Math.min(info.frames - 1, i)); pump(); } }
+async function seek(dir) {
+  stop();
+  $("status").textContent = "ищу кадр со скоплением…";
+  try {
+    const r = await (await fetch("api/seek?from=" + cur + "&dir=" + dir + "&" + params())).json();
+    $("status").textContent = r.frame < 0 ? "дальше скоплений нет" : "";
+    if (r.frame >= 0) go(r.frame);
+  } catch (e) { $("status").textContent = "ошибка: " + e.message; }
+}
+const playStep = () => Math.max(1, Math.round(10 * parseFloat($("speed").value) / 20));
+function tick(now) {
+  requestAnimationFrame(tick);
+  if (!playing || !info || loading) return;
+  const fps = 10 * parseFloat($("speed").value), step = playStep();
+  if (now - lastShown < 1000 * step / fps) return;
+  lastShown = now;
+  if (cur + step >= info.frames) { playing = false; syncPlay(); return; }
+  go(cur + step);
+}
+function syncPlay() { $("play").textContent = playing ? "❚❚ пауза" : "▶ пуск"; $("play").classList.toggle("on", playing); }
+
+// ---------------------------------------------------------------- цвет и легенда
+const RANGES = [[0, 80], [-3, 4], [0, 60]];
+function turboCss(t) {
+  const f = (c) => c[0] + t * (c[1] + t * (c[2] + t * (c[3] + t * (c[4] + t * c[5]))));
+  const r = f([0.13572138, 4.6153926, -42.66032258, 132.13108234, -152.94239396, 59.28637943]);
+  const g = f([0.09140261, 2.19418839, 4.84296658, -14.18503333, 4.27729857, 2.82956604]);
+  const b = f([0.1066733, 12.64194608, -60.58204836, 110.36276771, -89.90310912, 27.34824973]);
+  const c = (v) => Math.round(255 * Math.max(0, Math.min(1, v)));
+  return "rgb(" + c(r) + "," + c(g) + "," + c(b) + ")";
+}
+const sw = (v, t) => '<span><span class="sw" style="background:var(' + v + ')"></span>' + t + "</span>";
+function drawLegend() {
+  const m = +$("color").value;
+  uniforms.mode.value = m;
+  const lg = $("legend");
+  if (m === 3) {
+    lg.innerHTML = sw("--kept", "на месте") + sw("--added", "добавлена") + sw("--ignored", "добавлена, не ищем") + sw("--cluster", "скопление");
+  } else {
+    let [a, b] = RANGES[m];
+    if (m === 2) b = Math.min(+$("range").value, 60);
+    uniforms.lo.value.setComponent(m, a); uniforms.hi.value.setComponent(m, b);
+    const u = m === 0 ? "" : " м";
+    lg.innerHTML = '<span class="mono">' + a + u + '</span><canvas id="bar" width="120" height="8"></canvas><span class="mono">' +
+      b + u + "</span>" + sw("--cluster", "скопление");
+    const ctx = $("bar").getContext("2d");
+    for (let x = 0; x < 120; x++) { ctx.fillStyle = turboCss(x / 119); ctx.fillRect(x, 0, 1, 8); }
+  }
+  dirty = true;
+}
+function applyTheme() {
+  renderer.setClearColor(css("--bg"));
+  uniforms.cKept.value.set(css("--kept")); uniforms.cAdded.value.set(css("--added"));
+  uniforms.cIgnored.value.set(css("--ignored")); uniforms.cCluster.value.set(css("--cluster"));
+  boxMaterial.color.set(css("--cluster"));
+  if (zones.length) drawZoneArcs();
+  panes.forEach((p) => {
+    if (p.grid) p.scene.remove(p.grid);
+    p.grid = new THREE.GridHelper(200, 40, css("--grid"), css("--grid"));
+    p.grid.position.y = -2.2;
+    p.scene.add(p.grid);
+  });
+  dirty = true;
+}
+
+// ---------------------------------------------------------------- управление
+const stop = () => { playing = false; syncPlay(); };
+$("frame").addEventListener("input", (e) => { stop(); go(+e.target.value); });
+$("prev").onclick = () => { stop(); go(cur - 1); };
+$("next").onclick = () => { stop(); go(cur + 1); };
+$("more").onclick = () => {                              // только на узком экране
+  const f = document.querySelector("footer");
+  f.classList.toggle("collapsed");
+  $("more").classList.toggle("on", !f.classList.contains("collapsed"));
+  resize();
+};
+$("seekPrev").onclick = () => seek(-1);
+$("seekNext").onclick = () => seek(1);
+$("play").onclick = () => { playing = !playing; if (playing && cur >= info.frames - 1) go(0); syncPlay(); };
+$("color").onchange = drawLegend;
+$("range").oninput = (e) => { uniforms.maxRange.value = +e.target.value; $("rangeV").textContent = e.target.value + " м"; drawLegend(); drawBoxes(); };
+$("size").oninput = (e) => { uniforms.size.value = +e.target.value; dirty = true; };
+function applyCut() {
+  const l = +$("cutL").value, r = +$("cutR").value;
+  uniforms.cutL.value = l; uniforms.cutR.value = r;
+  $("cutLV").textContent = l + "°"; $("cutRV").textContent = r + "°";
+  $("fov").textContent = "поле " + (100 - l - r) + "°";
+  try { localStorage.setItem("view_clusters_cut", l + "," + r); } catch (e) {}
+  drawBoxes();
+}
+$("cutL").oninput = applyCut;
+$("cutR").oninput = applyCut;
+document.querySelectorAll("[data-view]").forEach((b) => b.onclick = () => setView(b.dataset.view));
+$("theme").onclick = () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+  try { localStorage.setItem("view_clusters_theme", root.dataset.theme); } catch (e) {}
+  applyTheme();
+};
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT") return;
+  const step = e.shiftKey ? 10 : 1;
+  if (e.key === "ArrowRight") { stop(); go(cur + step); e.preventDefault(); }
+  else if (e.key === "ArrowLeft") { stop(); go(cur - step); e.preventDefault(); }
+  else if (e.key === " ") { $("play").click(); e.preventDefault(); }
+  else if (e.key === "]") seek(1);
+  else if (e.key === "[") seek(-1);
+  else if (e.key === "1") setView("top");
+  else if (e.key === "2") setView("side");
+  else if (e.key === "3") setView("sensor");
+  else if (e.key === "0") setView("reset");
+});
+
+(async function start() {
+  try { const t = localStorage.getItem("view_clusters_theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  try {
+    const c = (localStorage.getItem("view_clusters_cut") || "").split(",");
+    if (c.length === 2) { $("cutL").value = +c[0] || 0; $("cutR").value = +c[1] || 0; }
+  } catch (e) {}
+  applyTheme(); resize(); setView("reset"); drawLegend(); applyCut();
+  loop(); requestAnimationFrame(tick);
+  try { info = await (await fetch("api/info")).json(); }
+  catch (e) { $("status").textContent = "сервер не отвечает — запустите python viewer/server.py <запись>"; return; }
+  // пороги: из файла на сервере; несохранённая правка из прошлого раза - если зоны те же
+  zones = info.zones; savedZones = JSON.stringify(zones);
+  try {
+    const z = JSON.parse(localStorage.getItem("view_clusters3d_zones") || "null");
+    const same = z && z.length === zones.length && z.every((q, k) => q.from === zones[k].from && q.to === zones[k].to);
+    if (same) zones = z;
+  } catch (e) {}
+  renderZones();
+  drawZoneArcs();
+  document.title = "Скопления — " + info.name;
+  $("frame").max = info.frames - 1;
+  go(0);
+})();
+</script>
+</body>
+</html>
