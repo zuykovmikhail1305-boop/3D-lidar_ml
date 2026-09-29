@@ -9,11 +9,15 @@ Phase 1 scope:
   in Phase 3; real data sources arrive in Phases 2 and 5.
 """
 
+
 from __future__ import annotations
 
 import random
 import sys
 from collections.abc import Mapping
+import numpy as np
+import pyvista as pv
+from pyvistaqt import QtInteractor
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
@@ -163,7 +167,7 @@ class MainWindow(QMainWindow):
 
         self._setup_zone_cards()
         self._setup_zones_table()
-        self._setup_viewport_placeholder()
+        self._setup_3d_viewport()
         self._setup_connections()
 
         # Initialize cards to the "no data" state.
@@ -194,20 +198,34 @@ class MainWindow(QMainWindow):
         header = self.ui.zonesTable.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-    def _setup_viewport_placeholder(self) -> None:
-        """Placeholder until pyvistaqt.QtInteractor is embedded (Phase 3)."""
+    def _setup_3d_viewport(self) -> None:
+        """Встраиваем PyVista QtInteractor в viewportContainer."""
+        pv.global_theme.allow_empty_mesh = True
+
         container = self.ui.viewportContainer
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        placeholder = QLabel(
-            "3D-вьюпорт будет подключён на Фазе 3\n(PyVista / QtInteractor)",
-            container,
+        
+        # Создаем 3D-движок и вставляем его в интерфейс
+        self.plotter = QtInteractor(container)
+        layout.addWidget(self.plotter.interactor)
+        
+        # Настраиваем цвета и сетку
+        self.plotter.set_background("#16181d")
+        self.plotter.add_axes()
+        self.plotter.show_grid(color="#5b6270")
+        self.plotter.set_scale(xscale=1.0, yscale=5.0, zscale=5.0)
+        
+        # Создаем "контейнер" для точек лидара
+        self.point_cloud = pv.PolyData()
+        self.plotter.add_mesh(
+            self.point_cloud,
+            color="cyan",
+            point_size=3.0,
+            render_points_as_spheres=True,
+            name="lidar_points",
+            reset_camera=False
         )
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder.setStyleSheet(
-            "color: #5b6270; font-size: 14px; background-color: #16181d;"
-        )
-        layout.addWidget(placeholder)
 
     def _setup_connections(self) -> None:
         """Wire buttons, menu actions and the demo stream."""
@@ -263,13 +281,29 @@ class MainWindow(QMainWindow):
         self._table_model.update_probabilities(probabilities)
         self.statusBar().showMessage("Вероятности препятствий обновлены", 2000)
 
-    # --- Demo stream (temporary, replaced by MLDataSource in Phase 5) ------
+    #--- Demo stream (temporary, replaced by MLDataSource in Phase 5) ------
 
     def _demo_tick(self) -> None:
         probabilities = {
             distance: random.random() for distance in ZONE_DISTANCES
-        }
+       }
         self.set_zone_probabilities(probabilities)
+    
+        x = np.random.uniform(0, 300, 2000)
+        y = np.random.uniform(-5, 5, 2000)
+        z = np.random.uniform(-5, 5, 2000)
+    
+        points = np.column_stack((x, y, z))
+    
+        new_cloud = pv.PolyData(points)
+       
+        self.plotter.add_mesh(
+            new_cloud,
+            name="lidar_points",
+            color="cyan",
+            point_size=3.0,
+            render_points_as_spheres=True
+        )
 
     def _toggle_demo_stream(self) -> None:
         if self._demo_timer.isActive():
