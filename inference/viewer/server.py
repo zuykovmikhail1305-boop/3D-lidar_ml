@@ -99,7 +99,8 @@ class Frames:
         before = to_points(r_in, i_in, vi, det.elevation, np.zeros_like(r_in))
         after = to_points(r_out, i_out, vo, det.elevation, cat)
         stats = {"frame": i, "n_in": int(vi.sum()), "n_out": int(vo.sum()), "added": int(added_all.sum()),
-                 "added_search": int(added.sum()), "in_clusters": int((labels > 0).sum()), "clusters": clusters}
+                 "added_search": int(added.sum()), "in_clusters": int((labels > 0).sum()), "clusters": clusters,
+                 "detected": int(len(clusters) > 0)}
         return before.tobytes() + after.tobytes(), len(before), stats
 
     def seek(self, start, step, zones):

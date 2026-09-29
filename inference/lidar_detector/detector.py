@@ -8,6 +8,8 @@
     for c in res.clusters:
         print(c["center"], c["extent_m"], c["points"])
 
+    det.detect(points)                            # только ответ: 1 - в кадре есть скопление, 0 - нет
+
 Что происходит с кадром:
 
   1. Облако -> развёртка 128 x 1024 (строка - луч, столбец - азимут с шагом
@@ -56,6 +58,11 @@ class Result:
         self.clusters = clusters            # список dict, см. README
         self.added = added                  # bool: добавленные моделью пиксели, где шёл поиск
         self._elevation = elevation
+
+    @property
+    def detected(self):
+        """1 - в кадре найдено хотя бы одно скопление, 0 - нет."""
+        return int(len(self.clusters) > 0)
 
     def _points(self, rng, mask, extra):
         rows, cols = np.nonzero(mask)
@@ -148,6 +155,12 @@ class Detector:
     def process_message(self, blob, zones=None):
         """Сырое сообщение sensor_msgs/PointCloud2 (CDR-байты, как в rosbag2) -> Result."""
         return self.process_points(parse_pointcloud2(blob)["points"], zones=zones)
+
+    def detect(self, points, zones=None):
+        """Облако точек (или сырое сообщение PointCloud2 в байтах) -> 1, если в кадре есть скопление, иначе 0."""
+        if isinstance(points, (bytes, bytearray, memoryview)):
+            return self.process_message(bytes(points), zones=zones).detected
+        return self.process_points(points, zones=zones).detected
 
 
 # --------------------------------------------------------------------------- #

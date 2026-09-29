@@ -7,7 +7,7 @@ r"""
 Результат в папке --out (по умолчанию results/<имя записи>):
 
     clusters.csv    по строке на скопление: кадр, время, зона, точки, размеры, центр, рамка
-    frames.csv      по строке на кадр: точек во входе и в ответе, добавлено, скоплений
+    frames.csv      по строке на кадр: detected (1 - есть скопление, 0 - нет), точек во входе и в ответе, добавлено, скоплений
     clusters.jsonl  по строке JSON на кадр со списком скоплений - удобно читать построчно
 
 Зависимости: numpy, torch.
@@ -48,7 +48,7 @@ def main():
 
     c_fields = ["frame", "timestamp_ns", "cluster", "zone", "points", "size_m", "dx_m", "dy_m", "dz_m",
                 "range_m", "x", "y", "z", "min_x", "min_y", "min_z", "max_x", "max_y", "max_z"]
-    f_fields = ["frame", "timestamp_ns", "points_in", "points_out", "added_in_search", "clusters"]
+    f_fields = ["frame", "timestamp_ns", "detected", "points_in", "points_out", "added_in_search", "clusters"]
     t0 = time.time()
     n_clusters = n_with = 0
     with open(os.path.join(out, "clusters.csv"), "w", newline="", encoding="utf-8") as fc, \
@@ -69,10 +69,10 @@ def main():
                              "x": c["center"][0], "y": c["center"][1], "z": c["center"][2],
                              "min_x": c["min"][0], "min_y": c["min"][1], "min_z": c["min"][2],
                              "max_x": c["max"][0], "max_y": c["max"][1], "max_z": c["max"][2]})
-            wf.writerow({"frame": i, "timestamp_ns": ts, "points_in": int((res.range_in > 0).sum()),
+            wf.writerow({"frame": i, "timestamp_ns": ts, "detected": res.detected, "points_in": int((res.range_in > 0).sum()),
                          "points_out": int((res.range_out > 0).sum()), "added_in_search": int(res.added.sum()),
                          "clusters": len(res.clusters)})
-            fj.write(json.dumps({"frame": i, "timestamp_ns": ts, "clusters": res.clusters}, ensure_ascii=False) + "\n")
+            fj.write(json.dumps({"frame": i, "timestamp_ns": ts, "detected": res.detected, "clusters": res.clusters}, ensure_ascii=False) + "\n")
             n_clusters += len(res.clusters)
             n_with += bool(res.clusters)
             if (n + 1) % 100 == 0 or n + 1 == len(frames):

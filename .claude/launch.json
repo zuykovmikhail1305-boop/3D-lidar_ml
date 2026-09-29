@@ -1,0 +1,75 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "inference-viewer",
+      "runtimeExecutable": "C:/Users/User/Desktop/lidar/3D-lidar_ml/mp/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "C:/Users/User/Desktop/lidar/3D-lidar_ml/inference/viewer/server.py",
+        "D:/hackaton_full_dataset/cloud_with_fake_obj",
+        "--no-browser",
+        "--port",
+        "8790"
+      ],
+      "port": 8790,
+      "url": "http://127.0.0.1:8790"
+    },
+    {
+      "name": "slicesdemo",
+      "runtimeExecutable": "C:/Users/User/Desktop/lidar/3D-lidar_ml/mp/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8791",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "D:/tunnel_slices_demo"
+      ],
+      "port": 8791,
+      "url": "http://127.0.0.1:8791"
+    },
+    {
+      "name": "sliceviewer",
+      "runtimeExecutable": "C:/Users/User/Desktop/lidar/3D-lidar_ml/mp/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "C:/Users/User/Desktop/lidar/3D-lidar_ml/view_slices.py",
+        "--pred",
+        "D:/slices_pred/epoch_010_train_loss_0.5123",
+        "--no-browser",
+        "--port",
+        "8792"
+      ],
+      "port": 8792,
+      "url": "http://127.0.0.1:8792"
+    },
+    {
+      "name": "sliceviewer-e5",
+      "runtimeExecutable": "C:/Users/User/Desktop/lidar/3D-lidar_ml/mp/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "C:/Users/User/Desktop/lidar/3D-lidar_ml/view_slices.py",
+        "--pred",
+        "D:/slices_pred/epoch_005_train_loss_0.5554",
+        "--no-browser",
+        "--port",
+        "8793"
+      ],
+      "port": 8793,
+      "url": "http://127.0.0.1:8793"
+    },
+    {
+      "name": "sliceviewer-e1",
+      "runtimeExecutable": "C:/Users/User/Desktop/lidar/3D-lidar_ml/mp/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "C:/Users/User/Desktop/lidar/3D-lidar_ml/view_slices.py",
+        "--pred",
+        "D:/slices_pred/epoch_001_train_loss_0.9102",
+        "--no-browser",
+        "--port",
+        "8794"
+      ],
+      "port": 8794,
+      "url": "http://127.0.0.1:8794"
+    }
+  ]
+}
