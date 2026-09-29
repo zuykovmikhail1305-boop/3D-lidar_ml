@@ -1,4 +1,5 @@
-from . import test_detector
+from .lidar_api import api
+import sys
 import rclpy
 from rclpy.qos import qos_profile_sensor_data, qos_profile_services_default
 from std_msgs.msg import Float32
@@ -12,11 +13,10 @@ class Node:
         self.logger = node.get_logger()
         self.publisher = node.create_publisher(Float32, 'obstacle_distance', qos_profile_services_default)
         node.create_subscription(PointCloud2, 'lidar_points', self.callback, qos_profile_sensor_data)
-        self.detector = test_detector.Detector()
     def callback(self, msg):
         self.logger.info('New message from lidar')
         points = read_points(msg)
-        result = self.detector.resolve(points)
+        result = api.analyze_json(points)
         if not result is None:
             self.logger.info(f'An obstacle in {result} m')
             msg = Float32()
