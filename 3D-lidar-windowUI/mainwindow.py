@@ -1,12 +1,13 @@
 """Main application window for the LiDAR obstacle monitor.
 
-Phase 1 scope:
+Phase 1-3 scope:
 - UI skeleton: splitter, three zone cards + zone table (model-view sync),
   dark QSS theme.
 - Temporary demo stream ("▶ Стрим") that feeds mock probabilities via a
   QTimer so the card/table update pipeline can be verified visually.
-- The 3D viewport placeholder will be replaced by pyvistaqt.QtInteractor
-  in Phase 3; real data sources arrive in Phases 2 and 5.
+- 3D viewport: pyvistaqt.QtInteractor renders the point cloud with
+  distance / intensity / height coloring, camera presets and an FPS meter.
+Real data sources arrive in Phases 2 and 5; streaming in Phase 6.
 """
 
 from __future__ import annotations
@@ -27,15 +28,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from data.processor import PointCloudProcessor
-from data.sources import load_point_cloud
-
 from core.constants import (
     STATUS_COLORS,
     STATUS_LABELS,
     ZONE_DISTANCES,
     status_for_probability,
 )
+from data.processor import PointCloudProcessor
+from data.sources import load_point_cloud
+from rendering import PointCloudRenderer
 from ui_form import Ui_MainWindow
 from zonetable_model import ZoneTableModel
 
@@ -174,9 +175,13 @@ class MainWindow(QMainWindow):
         self._demo_timer = QTimer(self)
         self._demo_timer.timeout.connect(self._demo_tick)
 
+        self._raw_frame = None
+        self._renderer = None
+
+        self._setup_status_labels()
         self._setup_zone_cards()
         self._setup_zones_table()
-        self._setup_viewport_placeholder()
+        self._setup_viewport()
         self._setup_connections()
 
         # Initialize cards to the "no data" state.
@@ -208,39 +213,65 @@ class MainWindow(QMainWindow):
         header = self.ui.zonesTable.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-    def _setup_viewport_placeholder(self) -> None:
-        """Placeholder until pyvistaqt.QtInteractor is embedded (Phase 3)."""
+    def _setup_status_labels(self) -> None:
+        """Permanent FPS / point-count widgets in the status bar."""
+        self._fps_label = QLabel("— FPS", self)
+        self._points_label = QLabel("— точек", self)
+        self.statusBar().addPermanentWidget(self._fps_label)
+        self.statusBar().addPermanentWidget(self._points_label)
+
+    def _setup_viewport(self) -> None:
+        """Embed the PyVista QtInteractor; fall back to a label without GL."""
         container = self.ui.viewportContainer
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        placeholder = QLabel(
-            "3D-вьюпорт будет подключён на Фазе 3\n(PyVista / QtInteractor)",
-            container,
-        )
-        placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder.setStyleSheet(
-            "color: #5b6270; font-size: 14px; background-color: #16181d;"
-        )
-        layout.addWidget(placeholder)
+        try:
+            renderer = PointCloudRenderer(container, parent=self)
+        except Exception as exc:  # noqa: BLE001 - no GL context (headless/CI)
+            self._renderer = None
+            placeholder = QLabel(f"3D-вьюпорт недоступен:\n{exc}", container)
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setWordWrap(True)
+            placeholder.setStyleSheet(
+                "color: #5b6270; font-size: 13px; background-color: #16181d;"
+            )
+            layout.addWidget(placeholder)
+            return
+        self._renderer = renderer
+        layout.addWidget(renderer.plotter_widget())
+        renderer.fpsUpdated.connect(self._on_fps_updated)
 
     def _setup_connections(self) -> None:
-        """Wire buttons, menu actions and the demo stream."""
+        """Wire buttons, menu actions, viewport controls and the demo stream."""
         self.ui.openFileButton.clicked.connect(self._on_open_file)
+        self.ui.actionOpenPointCloud.triggered.connect(self._on_open_file)
         self.ui.streamButton.clicked.connect(self._toggle_demo_stream)
         self.ui.actionQuit.triggered.connect(self.close)
 
-        for action in (
-            self.ui.actionOpenPointCloud,
-            self.ui.actionOpenMLReport,
-            self.ui.actionResetView,
-            self.ui.actionCameraFront,
-            self.ui.actionCameraTop,
-        ):
-            action.triggered.connect(
-                lambda _checked=False, a=action: self.statusBar().showMessage(
-                    f"«{a.text()}» — будет реализовано в следующих фазах", 3000
-                )
+        self.ui.actionOpenMLReport.triggered.connect(
+            lambda: self.statusBar().showMessage(
+                "«Открыть ML-отчёт» — будет реализовано в Фазе 5", 3000
             )
+        )
+        self.ui.actionResetView.triggered.connect(self._on_reset_view)
+        self.ui.actionCameraFront.triggered.connect(
+            lambda: self._on_camera_preset("front")
+        )
+        self.ui.actionCameraTop.triggered.connect(
+            lambda: self._on_camera_preset("top")
+        )
+
+        for radio, mode in (
+            (self.ui.colorByDistanceRadio, PointCloudRenderer.COLORING_DISTANCE),
+            (self.ui.colorByIntensityRadio, PointCloudRenderer.COLORING_INTENSITY),
+            (self.ui.colorByHeightRadio, PointCloudRenderer.COLORING_HEIGHT),
+        ):
+            radio.toggled.connect(
+                lambda _checked, m=mode: self._on_coloring_selected(m)
+            )
+
+        self.ui.voxelLeafSpin.valueChanged.connect(self._on_voxel_leaf_changed)
+        self.ui.gridVisibleCheck.toggled.connect(self._on_grid_toggled)
 
     # --- Zone update API ---------------------------------------------------
 
@@ -301,7 +332,39 @@ class MainWindow(QMainWindow):
                 5000,
             )
 
-    # --- Placeholder handlers ---------------------------------------------
+    # --- Viewport handlers -------------------------------------------------
+
+    def _on_reset_view(self) -> None:
+        if self._renderer is not None:
+            self._renderer.reset_view()
+
+    def _on_camera_preset(self, preset: str) -> None:
+        if self._renderer is not None:
+            self._renderer.set_camera(preset)
+
+    def _on_coloring_selected(self, mode: str) -> None:
+        if self._renderer is not None:
+            self._renderer.set_coloring(mode)
+
+    def _on_grid_toggled(self, visible: bool) -> None:
+        if self._renderer is not None:
+            self._renderer.set_grid_visible(visible)
+
+    def _on_voxel_leaf_changed(self, value: float) -> None:
+        """Re-process the last raw frame with the new voxel leaf size."""
+        if self._raw_frame is None or self._renderer is None:
+            return
+        filtered = PointCloudProcessor(leaf_size=value).process(self._raw_frame)
+        self._renderer.set_frame(filtered)
+        self._update_points_label(filtered)
+
+    def _on_fps_updated(self, fps: float) -> None:
+        self._fps_label.setText(f"{fps:5.0f} FPS")
+
+    def _update_points_label(self, frame) -> None:
+        self._points_label.setText(f"{frame.num_points:,} точек")
+
+    # --- File loading ------------------------------------------------------
 
     def _on_open_file(self) -> None:
         """Load a point cloud file (PCD/PLY/KITTI) and report summary stats."""
@@ -321,6 +384,11 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001 - surface any load error
             QMessageBox.critical(self, "Ошибка загрузки", str(exc))
             return
+
+        self._raw_frame = raw
+        if self._renderer is not None:
+            self._renderer.set_frame(filtered)
+        self._update_points_label(filtered)
 
         mn, mx = raw.bounds()
         self.statusBar().showMessage(

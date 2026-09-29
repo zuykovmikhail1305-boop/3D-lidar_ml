@@ -79,6 +79,32 @@ def main() -> int:
 
     ok = pix.save("_smoke_preview.png")
 
+    # --- Renderer (Phase 3): actor-graph verification -----------------------
+    if window._renderer is not None:
+        from data.processor import PointCloudProcessor
+        from data.sources import SyntheticTunnelSource
+
+        tunnel = SyntheticTunnelSource(
+            length_m=120.0, points_per_meter=300, obstacle_m=80.0, seed=4
+        ).read_frame()
+        filtered = PointCloudProcessor(
+            leaf_size=0.5, max_points=50_000
+        ).process(tunnel)
+
+        renderer = window._renderer
+        renderer.set_frame(filtered)
+        renderer.set_coloring(renderer.COLORING_INTENSITY)
+        renderer.set_camera("front")
+        renderer.set_grid_visible(True)
+        app.processEvents()
+
+        assert renderer._cloud_actor is not None, "cloud actor not created"
+        n_actors = len(renderer.plotter_widget().renderers[0].actors)
+        assert n_actors >= 3, f"expected >= 3 actors, got {n_actors}"
+        print(f"renderer OK: {n_actors} actors, cloud colored by intensity")
+    else:
+        print("renderer unavailable (no GL) — viewport shows fallback label")
+
     # --- Demo stream produces fresh probabilities --------------------------
     window._demo_tick()
     assert 0.0 <= (model.probability(200) or 0.0) <= 1.0
