@@ -6,8 +6,9 @@ services:
         USERNAME: ${USER:-ros2user}
         USER_UID: ${UID:-1000}
         USER_GID: ${GID:-1000}
-    image: ros2-humble-dev:latest
-    container_name: ros2-workspace
+    pull_policy: never
+    image: 3d-lidar-dev:latest
+    container_name: 3d-lidar
     network_mode: host
     ipc: host
     pid: host
