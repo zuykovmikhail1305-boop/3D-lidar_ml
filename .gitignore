@@ -217,5 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Dataset bind mount
+/dataset
 # веса и журналы обучения
 runs_unet/
