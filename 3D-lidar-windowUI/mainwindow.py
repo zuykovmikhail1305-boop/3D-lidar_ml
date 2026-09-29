@@ -209,6 +209,8 @@ class MainWindow(QMainWindow):
         # Создаем 3D-движок и вставляем его в интерфейс
         self.plotter = QtInteractor(container)
         layout.addWidget(self.plotter.interactor)
+
+        self.plotter.enable_terrain_style()
         
         # Настраиваем цвета и сетку
         self.plotter.set_background("#16181d")
