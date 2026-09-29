@@ -14,16 +14,21 @@ from __future__ import annotations
 import random
 import sys
 from collections.abc import Mapping
+from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QHeaderView,
     QLabel,
     QMainWindow,
     QMessageBox,
     QVBoxLayout,
 )
+
+from data.processor import PointCloudProcessor
+from data.sources import load_point_cloud
 
 from core.constants import (
     STATUS_COLORS,
@@ -153,10 +158,18 @@ class MainWindow(QMainWindow):
 
     DEMO_INTERVAL_MS = 1000
 
+    # Thread-safe entry point: emit from ANY thread (e.g. a worker MLDataSource
+    # in Phase 5); the queued connection runs set_zone_probabilities on the
+    # GUI thread, keeping all widget access on the main thread.
+    zoneProbabilitiesUpdated = Signal(object)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+
+        # Queued delivery to the GUI thread when emitted from other threads.
+        self.zoneProbabilitiesUpdated.connect(self.set_zone_probabilities)
 
         self._demo_timer = QTimer(self)
         self._demo_timer.timeout.connect(self._demo_tick)
@@ -186,6 +199,7 @@ class MainWindow(QMainWindow):
             card.setProperty("class", "zoneCard")
             card.style().unpolish(card)
             card.style().polish(card)
+            card.update()  # force recompute of property-based QSS selectors
 
     def _setup_zones_table(self) -> None:
         """Attach the ZoneTableModel to the QTableView and size columns."""
@@ -252,6 +266,7 @@ class MainWindow(QMainWindow):
         card.setProperty("status", status)
         card.style().unpolish(card)
         card.style().polish(card)
+        card.update()  # ensure the property selector is re-evaluated
 
     def set_zone_probabilities(
         self, probabilities: Mapping[int, float | None]
@@ -269,7 +284,9 @@ class MainWindow(QMainWindow):
         probabilities = {
             distance: random.random() for distance in ZONE_DISTANCES
         }
-        self.set_zone_probabilities(probabilities)
+        # Go through the thread-safe signal so the demo uses the same code
+        # path as the future worker-thread MLDataSource.
+        self.zoneProbabilitiesUpdated.emit(probabilities)
 
     def _toggle_demo_stream(self) -> None:
         if self._demo_timer.isActive():
@@ -287,10 +304,30 @@ class MainWindow(QMainWindow):
     # --- Placeholder handlers ---------------------------------------------
 
     def _on_open_file(self) -> None:
-        QMessageBox.information(
+        """Load a point cloud file (PCD/PLY/KITTI) and report summary stats."""
+        path, _ = QFileDialog.getOpenFileName(
             self,
-            "Открыть файл",
-            "Загрузка облака точек будет реализована в Фазе 2.",
+            "Открыть облако точек",
+            "",
+            "Облака точек (*.pcd *.ply *.bin);;Все файлы (*)",
+        )
+        if not path:
+            return
+        try:
+            raw = load_point_cloud(path)
+            filtered = PointCloudProcessor(
+                leaf_size=self.ui.voxelLeafSpin.value()
+            ).process(raw)
+        except Exception as exc:  # noqa: BLE001 - surface any load error
+            QMessageBox.critical(self, "Ошибка загрузки", str(exc))
+            return
+
+        mn, mx = raw.bounds()
+        self.statusBar().showMessage(
+            f"{Path(path).name}: {raw.num_points:,} точек "
+            f"→ {filtered.num_points:,} после фильтра | "
+            f"X [{mn[0]:.0f} … {mx[0]:.0f}] м | Y [{mn[1]:.1f} … {mx[1]:.1f}] | "
+            f"Z [{mn[2]:.1f} … {mx[2]:.1f}]"
         )
 
 

@@ -12,6 +12,10 @@
 | [`3D-lidar-windowUI/mainwindow.py`](3D-lidar-windowUI/mainwindow.py) | Главное окно: карточки зон, таблица, тёмная тема, демо-стрим |
 | [`3D-lidar-windowUI/zonetable_model.py`](3D-lidar-windowUI/zonetable_model.py) | `QAbstractTableModel` — источник истины вероятностей |
 | [`3D-lidar-windowUI/core/constants.py`](3D-lidar-windowUI/core/constants.py) | Пороги, статусы, цвета (чистая логика) |
+| [`3D-lidar-windowUI/data/frame.py`](3D-lidar-windowUI/data/frame.py) | `PointCloudFrame` — контейнер скана LiDAR |
+| [`3D-lidar-windowUI/data/processor.py`](3D-lidar-windowUI/data/processor.py) | Воксельный фильтр, децимация, раскраска (NumPy) |
+| [`3D-lidar-windowUI/data/sources.py`](3D-lidar-windowUI/data/sources.py) | Загрузчики PCD/PLY/KITTI, синтетический тоннель |
+| [`3D-lidar-windowUI/samples/tunnel_300m.pcd`](3D-lidar-windowUI/samples/tunnel_300m.pcd) | Сгенерированный пример облака тоннеля (364k точек) |
 
 ## Установка (Фаза 0)
 
@@ -38,11 +42,25 @@ cd 3D-lidar-windowUI
 .venv\Scripts\python.exe -m _smoke_test
 ```
 
+Юнит-тесты слоя данных:
+
+```powershell
+.venv\Scripts\python.exe -m pytest tests -q
+```
+
+Сгенерировать пример облака тоннеля (PCD, 300 м, препятствие на 280 м):
+
+```powershell
+.venv\Scripts\python.exe samples\generate_sample_tunnel.py
+```
+
+Кнопка **«Открыть файл»** в приложении загружает `.pcd` / `.ply` / `.bin` (KITTI), применяет воксельный фильтр (ползунок «Воксель, м») и показывает статистику в статус-баре.
+
 ## Статус реализации
 
 - [x] Фаза 0 — окружение и зависимости
 - [x] Фаза 1 — каркас UI (карточки зон, таблица, тёмная тема)
-- [ ] Фаза 2 — слой данных (парсеры PCD/PLY/KITTI, синтетический тоннель, тесты)
+- [x] Фаза 2 — слой данных (парсеры PCD/PLY/KITTI, синтетический тоннель, тесты)
 - [ ] Фаза 3 — 3D-рендеринг облака точек (PyVista)
 - [ ] Фаза 4 — зоны 100/200/300 м и оверлеи препятствий
 - [ ] Фаза 5 — ML-интеграция (контракт JSON, `ObstacleMonitor`)

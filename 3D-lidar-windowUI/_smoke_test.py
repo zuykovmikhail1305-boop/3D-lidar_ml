@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -80,6 +82,20 @@ def main() -> int:
     # --- Demo stream produces fresh probabilities --------------------------
     window._demo_tick()
     assert 0.0 <= (model.probability(200) or 0.0) <= 1.0
+
+    # --- Thread-safety: emit the signal from a worker thread ----------------
+    def _emit_from_thread() -> None:
+        window.zoneProbabilitiesUpdated.emit({100: 0.9, 200: 0.9, 300: 0.9})
+
+    worker = threading.Thread(target=_emit_from_thread)
+    worker.start()
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline and window.ui.zoneProb_300.text() != "90 %":
+        app.processEvents()
+        time.sleep(0.01)
+    worker.join(timeout=1.0)
+    assert window.ui.zoneProb_300.text() == "90 %", "signal not delivered from thread"
+    assert window.ui.zoneStatus_300.text() == "СТОП"
 
     print(
         f"SMOKE TEST OK | preview saved={ok} | size={pix.width()}x{pix.height()}"

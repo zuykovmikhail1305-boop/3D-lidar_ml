@@ -68,7 +68,7 @@
            </size>
           </property>
           <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
+           <enum>QFrame::NoFrame</enum>
           </property>
           <layout class="QVBoxLayout" name="zoneLayout_300">
            <item>
@@ -111,7 +111,7 @@
            </size>
           </property>
           <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
+           <enum>QFrame::NoFrame</enum>
           </property>
           <layout class="QVBoxLayout" name="zoneLayout_200">
            <item>
@@ -154,7 +154,7 @@
            </size>
           </property>
           <property name="frameShape">
-           <enum>QFrame::StyledPanel</enum>
+           <enum>QFrame::NoFrame</enum>
           </property>
           <layout class="QVBoxLayout" name="zoneLayout_100">
            <item>
