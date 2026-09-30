@@ -495,9 +495,10 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    app.setStyleSheet(APP_STYLESHEET)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+def main():
+    if __name__ == "__main__":
+        app = QApplication(sys.argv)
+        app.setStyleSheet(APP_STYLESHEET)
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec())
