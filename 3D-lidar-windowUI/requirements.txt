@@ -17,3 +17,11 @@ pytest>=8.0
 # Optional: point cloud file reading (PCD/PLY) and voxel downsampling.
 # If not needed, the built-in NumPy voxel filter is used instead.
 # open3d>=0.18
+
+# --- Optional: ROS2 live stream (ros_worker.py) -------------------------------
+# Устанавливаются вместе с дистрибутивом ROS2 (apt/rosdep), НЕ через pip:
+#   sudo apt install ros-<distro>-rclpy ros-<distro>-sensor-msgs-py ros-<distro>-std-msgs
+# Без них GUI запускается в демо-режиме (кнопка «Стрим» делает fallback).
+# rclpy
+# sensor_msgs_py
+# std_msgs
