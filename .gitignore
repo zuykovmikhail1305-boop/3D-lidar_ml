@@ -219,3 +219,6 @@ __marimo__/
 
 # Dataset bind mount
 /dataset
+
+# Logs
+/log
