@@ -1,4 +1,5 @@
-from .lidar_api import api
+
+from model.lidar_api import api
 import sys
 import rclpy
 from rclpy.qos import qos_profile_sensor_data, qos_profile_services_default
@@ -18,6 +19,7 @@ class Node:
         points = read_points(msg)
         result = api.analyze_json(points)
         if not result is None:
+            self.logger.info(result)
             msg = String()
             msg.data = result
             self.publisher.publish(msg)
