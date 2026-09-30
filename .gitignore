@@ -220,5 +220,7 @@ __marimo__/
 # Dataset bind mount
 /dataset
 
-# Logs
+# Runtime directories
 /log
+/install
+/build
