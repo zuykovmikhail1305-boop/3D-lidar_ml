@@ -12,6 +12,7 @@ Phase 1 scope:
 
 from __future__ import annotations
 
+import json
 import random
 import sys
 from collections.abc import Mapping
@@ -35,6 +36,7 @@ from core.constants import (
     ZONE_DISTANCES,
     status_for_probability,
 )
+from ros_worker import RosWorker
 from ui_form import Ui_MainWindow
 from zonetable_model import ZoneTableModel
 
@@ -151,6 +153,13 @@ QStatusBar { background-color: #1a1d23; color: #9aa4b2; }
 QSplitter::handle { background-color: #2f3440; }
 """
 
+# Маппинг блоков ответа модели (BLOCKS из lidar_api/api.py) на дистанции зон интерфейса.
+BLOCK_TO_DISTANCE: dict[str, int] = {
+    "0-100": 100,
+    "100-200": 200,
+    "200-300": 300,
+}
+
 
 class MainWindow(QMainWindow):
     """Main window: left panel with zone cards + table, right 3D viewport."""
@@ -164,6 +173,7 @@ class MainWindow(QMainWindow):
 
         self._demo_timer = QTimer(self)
         self._demo_timer.timeout.connect(self._demo_tick)
+        self._ros_worker: RosWorker | None = None
 
         self._setup_zone_cards()
         self._setup_zones_table()
@@ -232,7 +242,7 @@ class MainWindow(QMainWindow):
     def _setup_connections(self) -> None:
         """Wire buttons, menu actions and the demo stream."""
         self.ui.openFileButton.clicked.connect(self._on_open_file)
-        self.ui.streamButton.clicked.connect(self._toggle_demo_stream)
+        self.ui.streamButton.clicked.connect(self._toggle_stream)
         self.ui.actionQuit.triggered.connect(self.close)
 
         for action in (
@@ -307,18 +317,168 @@ class MainWindow(QMainWindow):
             render_points_as_spheres=True
         )
 
-    def _toggle_demo_stream(self) -> None:
+    def _toggle_stream(self) -> None:
+        """Переключает источник данных: ROS2 (живой стрим) либо демо-fallback."""
+        if self._ros_worker is not None and self._ros_worker.isRunning():
+            self._stop_ros_stream()
+            return
         if self._demo_timer.isActive():
             self._demo_timer.stop()
             self.ui.streamButton.setText("▶ Стрим")
             self.statusBar().showMessage("Демо-поток остановлен", 3000)
+            return
+        if RosWorker.available():
+            self._start_ros_stream()
         else:
-            self._demo_timer.start(self.DEMO_INTERVAL_MS)
-            self.ui.streamButton.setText("⏸ Пауза")
-            self.statusBar().showMessage(
-                "Демо-поток запущен (mock-вероятности; в Фазе 5 заменим на MLDataSource)",
-                5000,
-            )
+            self._start_demo_stream()
+
+    def _start_demo_stream(self) -> None:
+        """Демо-fallback (нет ROS2): mock-вероятности и случайное облако точек."""
+        self._demo_timer.start(self.DEMO_INTERVAL_MS)
+        self.ui.streamButton.setText("⏸ Пауза")
+        self.statusBar().showMessage(
+            "ROS2 (rclpy) не найден — включён демо-поток с mock-данными", 5000
+        )
+
+    def _start_ros_stream(self) -> None:
+        """Запускает RosWorker: lidar_points/model_out → Qt-сигналы → виджеты."""
+        self._demo_timer.stop()
+        self._prepare_real_viewport()
+
+        self._ros_worker = RosWorker(self)
+        self._ros_worker.cloud_ready.connect(self._on_cloud_ready)
+        self._ros_worker.prediction_ready.connect(self._on_prediction_ready)
+        self._ros_worker.error.connect(self._on_worker_error)
+        self._ros_worker.finished.connect(self._on_worker_finished)
+        self._ros_worker.start()
+
+        self.ui.streamButton.setText("⏸ Пауза")
+        self.statusBar().showMessage(
+            "ROS2-поток: lidar_points → модель → UI. Ожидание данных…", 0
+        )
+
+    def _stop_ros_stream(self) -> None:
+        """Останавливает воркер и ждёт завершения его потока."""
+        worker, self._ros_worker = self._ros_worker, None
+        if worker is not None:
+            worker.requestInterruption()
+            worker.wait(3000)
+        self.ui.streamButton.setText("▶ Стрим")
+        self.statusBar().showMessage("ROS2-поток остановлен", 3000)
+
+    def _shutdown_streams(self) -> None:
+        """Полная остановка источников (вызывается при закрытии окна)."""
+        self._demo_timer.stop()
+        worker, self._ros_worker = self._ros_worker, None
+        if worker is not None:
+            worker.requestInterruption()
+            worker.wait(5000)
+
+    def _on_worker_error(self, message: str) -> None:
+        """Ошибка воркера — показываем в statusbar (поток сам завершится)."""
+        self.statusBar().showMessage(message, 5000)
+
+    def _on_worker_finished(self) -> None:
+        """Воркер завершился сам — возвращаем кнопку в исходное состояние."""
+        if self.sender() is not self._ros_worker:
+            return
+        self._ros_worker = None
+        if self.ui.streamButton.text().startswith("⏸"):
+            self.ui.streamButton.setText("▶ Стрим")
+        self.statusBar().showMessage("ROS2-поток завершён", 3000)
+
+    # --- ROS2-данные: реальные предсказания и облако точек -------------------
+
+    def _on_prediction_ready(self, json_str: str) -> None:
+        """Разбирает JSON результата модели и обновляет карточки/таблицу/statusbar."""
+        try:
+            result = json.loads(json_str)
+        except (json.JSONDecodeError, TypeError) as exc:
+            self.statusBar().showMessage(f"Ошибка разбора результата модели: {exc}", 5000)
+            return
+
+        # Семантика: detected=1 → СТОП (вероятность 1.0), detected=0 → ОК (0.0).
+        # Дополнительно в статус зоны добавляем число скоплений и ближайшее расстояние.
+        probabilities: dict[int, float] = {}
+        details: dict[int, str] = {}
+        for block in result.get("blocks", []):
+            distance = BLOCK_TO_DISTANCE.get(block.get("block"))
+            if distance is None:
+                continue
+            detected = int(block.get("detected") or 0)
+            probabilities[distance] = 1.0 if detected else 0.0
+
+            clusters = int(block.get("clusters") or 0)
+            nearest = block.get("nearest_m")
+            status = status_for_probability(probabilities[distance])
+            parts = [STATUS_LABELS[status]]
+            if clusters:
+                parts.append(f"{clusters} скопл.")
+            if nearest is not None:
+                parts.append(f"{nearest:.0f} м")
+            details[distance] = " · ".join(parts)
+
+        self.set_zone_probabilities(probabilities)
+        for distance, text in details.items():
+            self._zone_cards[distance][2].setText(text)
+
+        # Служебная информация кадра: detected | points_in → points_out (+added) | time_ms.
+        frame = result.get("frame") or {}
+        parts = [f"detected: {int(result.get('detected') or 0)}"]
+        pin, pout, added = frame.get("points_in"), frame.get("points_out"), frame.get("added")
+        if pin is not None and pout is not None:
+            sign = "+" if (added or 0) >= 0 else ""
+            parts.append(f"points: {pin} → {pout} ({sign}{added or 0})")
+        if result.get("time_ms") is not None:
+            parts.append(f"{result['time_ms']} ms")
+        self.statusBar().showMessage(" | ".join(parts), 0)
+
+    def _on_cloud_ready(self, points) -> None:
+        """Обновляет реальное облако в существующем mesh (без пересоздания add_mesh)."""
+        try:
+            points = np.asarray(points, dtype=np.float32)
+        except (TypeError, ValueError) as exc:
+            self.statusBar().showMessage(f"Ошибка формата облака: {exc}", 5000)
+            return
+        if points.ndim != 2 or points.shape[1] < 3:
+            self.statusBar().showMessage("Неожиданный формат облака точек", 3000)
+            return
+
+        # Собираем новый PolyData и copy_from-им его в существующий: объект vtk
+        # не меняется, актор «lidar_points» продолжает на него ссылаться, при этом
+        # точки, скаляры и размер кадра обновляются целиком (между кадрами число
+        # точек может отличаться — прямое присваивание .points это не переживёт).
+        cloud = pv.PolyData(points[:, :3])
+        if points.shape[1] >= 4:
+            cloud.point_data["intensity"] = points[:, 3]
+            cloud.set_active_scalars("intensity")
+        self.point_cloud.copy_from(cloud)
+
+        if points.shape[1] >= 4:
+            self._enable_intensity_coloring(points[:, 3])
+        self.plotter.render()
+
+    def _enable_intensity_coloring(self, intensity) -> None:
+        """Включает раскраску точек по интенсивности на существующем акторе."""
+        actor = self.plotter.actors.get("lidar_points")
+        if actor is None:
+            return
+        actor.mapper.scalar_visibility = True
+        finite = intensity[np.isfinite(intensity)]
+        if finite.size:
+            actor.mapper.scalar_range = (float(finite.min()), float(finite.max()))
+
+    def _prepare_real_viewport(self) -> None:
+        """Настройка вьюпорта под реальные данные лидара (z вверх, тоннель вдоль -y)."""
+        # Убираем декоративный масштаб демо: реальные точки отображаем 1:1.
+        self.plotter.set_scale(xscale=1.0, yscale=1.0, zscale=1.0)
+        # Камера — с +y сверху, взгляд вдоль тоннеля (-y) уходит вглубь экрана.
+        self.plotter.camera_position = [
+            (0.0, 150.0, 110.0),
+            (0.0, 0.0, 2.0),
+            (0.0, 0.0, 1.0),
+        ]
+        self.plotter.render()
 
     # --- Placeholder handlers ---------------------------------------------
 
@@ -328,6 +488,11 @@ class MainWindow(QMainWindow):
             "Открыть файл",
             "Загрузка облака точек будет реализована в Фазе 2.",
         )
+
+    def closeEvent(self, event) -> None:
+        """Останавливаем фоновые источники перед закрытием окна."""
+        self._shutdown_streams()
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":
