@@ -30,15 +30,15 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from core.constants import (
+from app.core.constants import (
     STATUS_COLORS,
     STATUS_LABELS,
     ZONE_DISTANCES,
     status_for_probability,
 )
-from ros_worker import RosWorker
-from ui_form import Ui_MainWindow
-from zonetable_model import ZoneTableModel
+from app.ros_worker import RosWorker
+from app.ui_form import Ui_MainWindow
+from app.zonetable_model import ZoneTableModel
 
 APP_STYLESHEET = """
 QMainWindow, QWidget#centralwidget {

@@ -14,7 +14,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from mainwindow import APP_STYLESHEET, MainWindow
+from app.mainwindow import APP_STYLESHEET, MainWindow
 from zonetable_model import ZoneTableModel
 
 

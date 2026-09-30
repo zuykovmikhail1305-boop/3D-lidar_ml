@@ -16,7 +16,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QFont
 
-from core.constants import (
+from app.core.constants import (
     COLOR_NONE,
     STATUS_COLORS,
     ZONE_DISTANCES,
