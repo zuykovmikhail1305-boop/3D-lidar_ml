@@ -40,7 +40,7 @@ docker build -f release.Dockerfile -t 3d-lidar-release --build-arg USERNAME=<USE
 ## Запуск готового образа
 Для того чтобы запустить контейнер из готового образа, необходимо выполнить следующие команду:
 ```bash
-docker run -it --network host --ipc host --pid host -v /tmp/.X11-unix:/tmp/.X11-unix 3d-lidar-release:latest
+docker run -it --network host --ipc host --pid host --device /dev/dri:/dev/dri -v /tmp/.X11-unix:/tmp/.X11-unix 3d-lidar-release:latest
 ros2 run model model & ros2 run 3D-lidar-windowUI ui
 ```
 
