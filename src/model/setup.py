@@ -11,7 +11,10 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'numpy>=1.24', 'torch>=2.1'],
+    package_data={
+        package_name: ['lidar_api/artifacts/*', 'lidar_api/artifacts/**']
+    },
+    install_requires=['setuptools'],
     zip_safe=True,
     maintainer='root',
     maintainer_email='root@todo.todo',

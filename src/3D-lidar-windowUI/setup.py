@@ -11,15 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=[
-        'setuptools',
-        'PySide6>=6.6',
-        'numpy>=1.26',
-        'pyvista>=0.43',
-        'pyvistaqt>=0.11',
-        'pydantic>=2.5',
-        'pytest>=8.0'
-    ],
+    install_requires=['setuptools'],
     zip_safe=True,
     maintainer='hackhaton',
     maintainer_email='ebudarin0@gmail.com',

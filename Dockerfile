@@ -27,6 +27,9 @@ RUN apt-get install -y \
     ros-humble-turtlesim \
     ros-humble-rqt*
 
+RUN apt update
+RUN apt install libxcb-cursor0
+
 RUN echo "source /opt/ros/humble/setup.bash" >> /home/$USERNAME/.bashrc
 ENV SHELL /bin/bash
 
@@ -34,4 +37,7 @@ ENV SHELL /bin/bash
 WORKDIR /home/ws
 RUN chown $USER_UID:$USER_GID /home/ws
 USER $USERNAME
+
+RUN pip install pyvistaqt
+
 CMD ["/bin/bash"]

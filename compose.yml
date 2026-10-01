@@ -22,6 +22,8 @@ services:
       - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
       - DISPLAY=:0
       - LIBGL_ALWAYS_SOFTWARE=1
+      - QT_API=pyside6
+      - QT_QPA_PLATFORM=xcb
 
     volumes:
       # Workspace with persistent build cache
