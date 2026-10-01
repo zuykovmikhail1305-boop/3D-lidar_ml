@@ -7,7 +7,7 @@
 **Важно: модель-детектор и приложение работают в 42 ROS DOMAIN ID**
 
 ## Окружение для разработки
-Чтобы запустить решение необходимо выполнить следующие комманды в корне проекта:
+Чтобы запустить решение необходимо выполнить следующие команды в корне проекта:
 ```bash
 docker compose up -d
 docker compose attach ros2
@@ -20,11 +20,11 @@ pip install pyvistaqt
 colcon build
 source install/setup.bash
 ```
-Для запуска модели-детектора нунжно выполнить:
+Для запуска модели-детектора нужно выполнить:
 ```bash
 ros2 run model model
 ```
-Для запуска модели-детектора нунжно выполнить:
+Для запуска модели-детектора нужно выполнить:
 ```bash
 ros2 run 3D-lidar-windowUI ui
 ```
@@ -38,7 +38,7 @@ docker build -f release.Dockerfile -t 3d-lidar-release --build-arg USERNAME=<USE
 Вместо <USERNAME> и <USER_UID> рекомендуется подставить имя пользователя и его uid соответственно во избежания конфликтов прав доступа.
 
 ## Запуск готового образа
-Для того чтобы запустить контейнер из готового образа, необходимо выполнить следующие комманду:
+Для того чтобы запустить контейнер из готового образа, необходимо выполнить следующие команду:
 ```bash
 docker run -it --network host --ipc host --pid host -v /tmp/.X11-unix:/tmp/.X11-unix 3d-lidar-release:latest
 ros2 run model model & ros2 run 3D-lidar-windowUI ui
