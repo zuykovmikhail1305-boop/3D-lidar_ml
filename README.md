@@ -35,7 +35,7 @@ ros2 run 3D-lidar-windowUI ui
 docker build -t 3d-lidar-dev --build-arg USERNAME=<USERNAME> --build-arg USER_UID=<USER_UID> .
 docker build -f release.Dockerfile -t 3d-lidar-release --build-arg USERNAME=<USERNAME> --build-arg USER_UID=<USER_UID> .
 ```
-Вместо &lt;USERNAME&gt; и &lt;USER_UID&gt; рекомендуется подставить имя пользователя и его uid соответственно во избежания конфликтов прав доступа.
+Вместо &lt;USERNAME&gt; и &lt;USER_UID&gt; рекомендуется подставить имя текущего пользователя и его uid соответственно во избежания конфликтов прав доступа.
 
 ## Запуск готового образа
 Для того чтобы запустить контейнер из готового образа, необходимо выполнить следующие команду:
